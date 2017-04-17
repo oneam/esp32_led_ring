@@ -100,6 +100,9 @@ static void led_ring_animation_loop(void* param) {
   ESP_LOGI(LOG_LEDRING, "led_ring animation loop");
   led_ring_t ctx = (led_ring_t)param;
 
+  rgb_t black = { 0, 0, 0 };
+  ws2812rmt_set_colors(ctx->ws2812, &black, 1, true);
+
   while(1) {
     if(!ctx->animating) xSemaphoreTake(ctx->loop_semaphore, portMAX_DELAY);
 

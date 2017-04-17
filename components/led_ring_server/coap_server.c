@@ -15,7 +15,12 @@
  */
 
 #include "coap_server.h"
+
+#include <coap/pdu.h>
+#include <stddef.h>
 #include <esp_log.h>
+#include <freertos/task.h>
+#include <lwip/sockets.h>
 
 const static char *LOG_TAG = "CoAP_server";
 
@@ -59,8 +64,9 @@ int coap_join_multicast(coap_context_t* ctx) {
  * This server implementation only supports synchronous responses.
  *
  */
-void coap_server_start(coap_context_t* ctx) {
+void coap_server_loop(void *param) {
   ESP_LOGI(LOG_TAG, "Starting CoAP server");
+  coap_context_t* ctx = (coap_context_t*)param;
 
   if ( coap_join_multicast(ctx) < 0 ) goto end;
 
@@ -70,4 +76,8 @@ void coap_server_start(coap_context_t* ctx) {
 
   end:
   coap_free_context(ctx);
+}
+
+void coap_server_start(coap_context_t* ctx) {
+  xTaskCreate(coap_server_loop, "coap_server_loop", 2048, ctx, 10, NULL);
 }

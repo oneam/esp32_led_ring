@@ -142,7 +142,7 @@ coap_resource_t* led_ring_resource_init(coap_context_t* ctx, led_ring_t led_ring
   if (!resource) return resource;
 
   led_ring = led_ring_ctx;
-  strcpy(mode, mode_strobing_rainbow);
+  strcpy(mode, mode_solid_color);
 
   coap_register_handler(resource, COAP_REQUEST_GET, led_ring_get_handler);
   coap_register_handler(resource, COAP_REQUEST_PUT, led_ring_put_handler);

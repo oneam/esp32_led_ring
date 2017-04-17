@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-#include "freertos/FreeRTOS.h"
-#include "esp_wifi.h"
-#include "esp_system.h"
-#include "esp_event.h"
-#include "esp_event_loop.h"
-#include "nvs_flash.h"
+#include "coap_server.h"
 #include "driver/gpio.h"
 #include "driver/rmt.h"
-#include "ws2812rmt.h"
-#include "string.h"
-#include "coap_server.h"
+#include "esp_event.h"
+#include "esp_event_loop.h"
+#include "esp_log.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "freertos/FreeRTOS.h"
 #include "led_ring_resource.h"
+#include "nvs_flash.h"
+#include "string.h"
+#include "ws2812rmt.h"
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -58,10 +59,16 @@ void app_main()
   ESP_ERROR_CHECK( esp_wifi_connect() );
 
   led_ring = led_ring_init(WS2812_CHANNEL, WS2812_PIN, 24);
-  led_ring_set_rainbow(led_ring, 64);
-  led_ring_start_strobing_loop(led_ring);
 
   coap_context_t* server = coap_server_create();
   led_ring_resource_init(server, led_ring);
   coap_server_start(server);
+
+  // Startup sequence
+  for (int i=16; i >= 0; --i) {
+    rgb_t blue = { 0, 0, i };
+    led_ring_set_one_color(led_ring, blue);
+    led_ring_update(led_ring);
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
 }
