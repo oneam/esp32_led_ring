@@ -21,9 +21,17 @@
 
 typedef struct led_ring_s* led_ring_t;
 
-led_ring_t led_ring_init(rmt_channel_t channel, gpio_num_t gpio, int led_count, rgb_t* led_color_buffer);
+/** Initialize LED ring
+ *
+ * In addition to creating an ws2818rmt device to update the LED,
+ * this structure creates a buffer of led_count rgb_t elements.
+ */
+led_ring_t led_ring_init(rmt_channel_t channel, gpio_num_t gpio, int led_count);
 
 rgb_t* led_ring_get_color_buffer(led_ring_t ctx);
+
+/** Write the LED colors to the led */
+void led_ring_update(led_ring_t ctx);
 
 /** A spinner loop spins the pattern around the loop */
 void led_ring_start_spinner_loop(led_ring_t ctx);
@@ -38,5 +46,7 @@ void led_ring_set_one_color(led_ring_t ctx, rgb_t color);
 void led_ring_set_colors(led_ring_t ctx, rgb_t* colors);
 void led_ring_set_pattern(led_ring_t ctx, rgb_t* pattern, int color_count);
 void led_ring_set_rainbow(led_ring_t ctx, int max_brightness);
+
+void led_ring_uninit(led_ring_t *ctx);
 
 #endif /* MAIN_LED_RING_H_ */

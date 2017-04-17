@@ -18,6 +18,7 @@
 #define MAIN_WS2812RMT_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <driver/gpio.h>
 #include <driver/rmt.h>
 
@@ -35,37 +36,34 @@ inline bool rgb_equal(rgb_t left, rgb_t right) {
 /** Context used to reference a ws2812rmt channel */
 typedef struct ws2812rmt_s* ws2812rmt_t;
 
-/** Initializes a ws2812rmt channel with a given RMT channel and GPIO port */
-ws2812rmt_t ws2812rmt_init(rmt_channel_t channel, gpio_num_t gpio_num);
+/** Initializes a ws2812rmt channel with a given RMT channel and GPIO port
+ *
+ * The ws2812rmt will malloc and store an internal buffer of (led_count * 96) + 4 bytes.
+ */
+ws2812rmt_t ws2812rmt_init(rmt_channel_t channel, gpio_num_t gpio_num, int led_count);
+
+/** Initializes a ws2812rmt channel with a given RMT channel and GPIO port
+ *
+ * This version of init uses a static rmt_item32_t buffer that must be at least (led_count * 24) + 1 items large.
+ */
+ws2812rmt_t ws2812rmt_init_static(rmt_channel_t channel, gpio_num_t gpio_num, int led_count, rmt_item32_t* tx_buffer);
 
 /**
- * Sets the LEDs to individual colors.
+ * Sets the LED colors.
  *
  * This function will only transmit the new colors once, and
  * will return once the new colors are transmitted.
  *
  * You can transmit a new set of colors once the function returns.
+ *
+ * If repeat is set, the pattern will be repeated for all LEDs.
+ * Otherwise transmission will stop after the pattern is complete.
+ *
+ * If color_count is greater than led_count of the ws2812rmt device, it will be truncated.
  */
-void ws2812rmt_set_colors(ws2812rmt_t ws2812rmt, rgb_t* colors, int color_count);
+void ws2812rmt_set_colors(ws2812rmt_t ctx, rgb_t* colors, int color_count, bool repeat);
 
-/**
- * Sets all of the LEDs to the same color.
- *
- * This function will only transmit the new colors once, and
- * will return once the new colors are transmitted.
- *
- * You can transmit a new set of colors once the function returns.
- */
-void ws2812rmt_set_one_color(ws2812rmt_t ws2812rmt, rgb_t color, int led_count);
-
-/**
- * Sets the LEDs to a repeating pattern.
- *
- * This function will only transmit the new colors once, and
- * will return once the new colors are transmitted.
- *
- * You can transmit a new set of colors once the function returns.
- */
-void ws2812rmt_set_pattern(ws2812rmt_t ws2812rmt, rgb_t* pattern, int color_count, int led_count);
+/** Shuts down RMT and releases resources */
+void ws2812rmt_uninit(ws2812rmt_t *ctx);
 
 #endif /* MAIN_WS2812RMT_H_ */

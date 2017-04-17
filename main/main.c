@@ -32,11 +32,9 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
   return ESP_OK;
 }
 
-#define LED_COUNT    24
-#define WS2812_PIN    GPIO_NUM_14
-#define WS2812_CHANNEL	RMT_CHANNEL_0
+#define WS2812_PIN      GPIO_NUM_14
+#define WS2812_CHANNEL  RMT_CHANNEL_0
 
-rgb_t led_color_buffer[LED_COUNT];
 led_ring_t led_ring;
 
 void app_main()
@@ -50,7 +48,7 @@ void app_main()
   ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
   wifi_config_t sta_config = {
       .sta = {
-          .ssid = "access_point_name",
+          .ssid = "ssid",
           .password = "password",
           .bssid_set = false
       }
@@ -59,7 +57,7 @@ void app_main()
   ESP_ERROR_CHECK( esp_wifi_start() );
   ESP_ERROR_CHECK( esp_wifi_connect() );
 
-  led_ring = led_ring_init(WS2812_CHANNEL, WS2812_PIN, LED_COUNT, led_color_buffer);
+  led_ring = led_ring_init(WS2812_CHANNEL, WS2812_PIN, 24);
   led_ring_set_rainbow(led_ring, 64);
   led_ring_start_strobing_loop(led_ring);
 

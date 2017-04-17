@@ -21,24 +21,23 @@
 #include <esp_log.h>
 
 #define MAX_LED_RINGS 8
-
-#define delay_ms(ms) vTaskDelay((ms) / portTICK_RATE_MS)
+#define LOG_LEDRING "led_ring"
 
 struct led_ring_s {
   ws2812rmt_t ws2812;
   int led_count;
   rgb_t* led_color_buffer;
-  TaskHandle_t active_task;
+  TaskHandle_t loop_task;
+  SemaphoreHandle_t loop_semaphore;
+  volatile bool strobing;
+  volatile bool spinning;
+  volatile bool animating;
 };
 
 struct led_ring_s led_rings[MAX_LED_RINGS];
 
 rgb_t* led_ring_get_color_buffer(led_ring_t ctx) {
   return ctx->led_color_buffer;
-}
-
-static void led_ring_update_colors(led_ring_t ctx) {
-  ws2812rmt_set_colors(ctx->ws2812, ctx->led_color_buffer, ctx->led_count);
 }
 
 #define RAINBOW_SECTION_RED_TO_YELLOW   0
@@ -97,65 +96,79 @@ static rgb_t led_ring_calculate_rainbow_color(int index, int count, int max_brig
   return color;
 }
 
-led_ring_t led_ring_init(rmt_channel_t channel, gpio_num_t gpio_num, int led_count, rgb_t* led_color_buffer) {
-  led_ring_t ctx = led_rings + channel;
-  ctx->led_count = led_count;
-  ctx->led_color_buffer = led_color_buffer;
-  ctx->active_task = NULL;
-  ctx->ws2812 = ws2812rmt_init(channel, gpio_num);
-
-  return ctx;
-}
-
-static void led_ring_spinner_loop(void* param) {
+static void led_ring_animation_loop(void* param) {
+  ESP_LOGI(LOG_LEDRING, "led_ring animation loop");
   led_ring_t ctx = (led_ring_t)param;
 
   while(1) {
-    led_ring_update_colors(ctx);
-    delay_ms(100);
+    if(!ctx->animating) xSemaphoreTake(ctx->loop_semaphore, portMAX_DELAY);
 
-    // Shift the pattern by one
-    rgb_t led_0 = ctx->led_color_buffer[0];
-    for(int i=0; i < ctx->led_count - 1; ++i) ctx->led_color_buffer[i] = ctx->led_color_buffer[i + 1];
-    ctx->led_color_buffer[ctx->led_count - 1] = led_0;
-  }
-}
+    if(ctx->strobing) {
+      ws2812rmt_set_colors(ctx->ws2812, ctx->led_color_buffer, 1, true);
+    }
 
-void led_ring_start_spinner_loop(led_ring_t ctx) {
-  xTaskCreate(led_ring_spinner_loop, "spinner_loop", 2048, ctx, 5, &(ctx->active_task));
-}
+    if(ctx->spinning) {
+      ws2812rmt_set_colors(ctx->ws2812, ctx->led_color_buffer, ctx->led_count, true);
+    }
 
-void led_ring_strobing_loop(void* param) {
-  led_ring_t ctx = (led_ring_t)param;
+    if(ctx->animating) {
+      vTaskDelay(pdMS_TO_TICKS(100));
 
-  while(1) {
-    for(int i=0; i < ctx->led_count; ++i) {
-      rgb_t color = ctx->led_color_buffer[i];
-      ws2812rmt_set_one_color(ctx->ws2812, color, ctx->led_count);
-      delay_ms(100);
+      // Shift the pattern
+      rgb_t led_0 = ctx->led_color_buffer[0];
+      for(int i=0; i < ctx->led_count - 1; ++i) ctx->led_color_buffer[i] = ctx->led_color_buffer[i + 1];
+      ctx->led_color_buffer[ctx->led_count - 1] = led_0;
     }
   }
 }
 
+led_ring_t led_ring_init(rmt_channel_t channel, gpio_num_t gpio_num, int led_count) {
+  ESP_LOGI(LOG_LEDRING, "Initializing LED ring count %d, channel %d, GPIO %d", led_count, channel, gpio_num);
+  led_ring_t ctx = led_rings + channel;
+  ctx->led_count = led_count;
+  ctx->led_color_buffer = calloc(led_count, sizeof(rgb_t));
+  if(!ctx->led_color_buffer) return NULL;
+  ctx->ws2812 = ws2812rmt_init(channel, gpio_num, led_count);
+  ctx->animating = false;
+  ctx->strobing = false;
+  ctx->spinning = false;
+  ctx->loop_semaphore = xSemaphoreCreateBinary();
+  xTaskCreate(led_ring_animation_loop, "led_animation_loop", 2048, ctx, 5, &(ctx->loop_task));
+
+  return ctx;
+}
+
+void led_ring_update(led_ring_t ctx) {
+  ws2812rmt_set_colors(ctx->ws2812, ctx->led_color_buffer, ctx->led_count, true);
+}
+
+static void led_ring_start_loop(led_ring_t ctx) {
+  ctx->animating = true;
+  xSemaphoreGive(ctx->loop_semaphore);
+}
+
+void led_ring_start_spinner_loop(led_ring_t ctx) {
+  ctx->spinning = true;
+  led_ring_start_loop(ctx);
+}
+
 void led_ring_start_strobing_loop(led_ring_t ctx) {
-  xTaskCreate(led_ring_strobing_loop, "strobing_loop", 2048, ctx, 5, &(ctx->active_task));
+  ctx->strobing = true;
+  led_ring_start_loop(ctx);
 }
 
 void led_ring_stop_loop(led_ring_t ctx) {
-  if(ctx->active_task != NULL) {
-    vTaskDelete(ctx->active_task);
-    ctx->active_task = NULL;
-  }
+  ctx->animating = false;
+  ctx->strobing = false;
+  ctx->spinning = false;
 }
 
 void led_ring_set_one_color(led_ring_t ctx, rgb_t color) {
   for (int i=0; i < ctx->led_count; ++i) ctx->led_color_buffer[i] = color;
-  led_ring_update_colors(ctx);
 }
 
 void led_ring_set_colors(led_ring_t ctx, rgb_t* colors) {
   for(int i=0; i < ctx->led_count - 1; ++i) ctx->led_color_buffer[i] = colors[i];
-  led_ring_update_colors(ctx);
 }
 
 void led_ring_set_pattern(led_ring_t ctx, rgb_t* pattern, int color_count) {
@@ -163,8 +176,6 @@ void led_ring_set_pattern(led_ring_t ctx, rgb_t* pattern, int color_count) {
     int color_index = i % color_count;
     ctx->led_color_buffer[i] = pattern[color_index];
   }
-
-  led_ring_update_colors(ctx);
 }
 
 void led_ring_set_rainbow(led_ring_t ctx, int max_brightness) {
@@ -172,7 +183,13 @@ void led_ring_set_rainbow(led_ring_t ctx, int max_brightness) {
     rgb_t color = led_ring_calculate_rainbow_color(i, ctx->led_count, max_brightness);
     ctx->led_color_buffer[i] = color;
   }
+}
 
-  led_ring_update_colors(ctx);
+void led_ring_uninit(led_ring_t *ctx) {
+  if(!ctx) return;
+  vTaskDelete((*ctx)->loop_task);
+  free((*ctx)->led_color_buffer);
+  ws2812rmt_uninit(&((*ctx)->ws2812));
+  ctx = NULL;
 }
 

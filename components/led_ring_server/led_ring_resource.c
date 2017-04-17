@@ -98,9 +98,11 @@ static void led_ring_put_handler(coap_context_t *ctx, struct coap_resource_t *re
     solid_color.b = (uint8_t)b_json->valueint;
 
     led_ring_set_one_color(led_ring, solid_color);
+    led_ring_update(led_ring);
   } else if(strcmp(mode_json->valuestring, mode_static_rainbow) == 0) {
     led_ring_stop_loop(led_ring);
     led_ring_set_rainbow(led_ring, 64);
+    led_ring_update(led_ring);
   } else if(strcmp(mode_json->valuestring, mode_spinning_rainbow) == 0) {
     led_ring_stop_loop(led_ring);
     led_ring_set_rainbow(led_ring, 64);
@@ -112,6 +114,7 @@ static void led_ring_put_handler(coap_context_t *ctx, struct coap_resource_t *re
   } else if(strcmp(mode_json->valuestring, mode_static_dots) == 0) {
     led_ring_stop_loop(led_ring);
     led_ring_set_pattern(led_ring, (rgb_t*)dots, dot_count);
+    led_ring_update(led_ring);
   } else if(strcmp(mode_json->valuestring, mode_spinning_dots) == 0) {
     led_ring_stop_loop(led_ring);
     led_ring_set_pattern(led_ring, (rgb_t*)dots, dot_count);
